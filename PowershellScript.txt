@@ -1,0 +1,528 @@
+
+#################################################################################################################################################
+
+# Create Web Site and Application Pool
+
+# Author: Tim Proffitt
+
+# Created: 20120523                     
+
+#
+
+# Modified: Guru Matta
+
+# Modified Date: 12122019
+
+#
+
+# Purpose:      Audit Script for the IIS Automated Installation.  This script will validate that everything is installed
+
+#               and configured correctly.
+
+#
+
+# Modified Notes: Added OS Type, Number of Processors, Number of Sockets, Number of Cores, Number of Logical Processors and RAM.
+
+#                 Added telnet-client to featues list to make sure that it's installed.
+
+#                 Replaced Web Deployment Tool with Microsoft Web Deploy.
+
+#                 Added code to Verify MS Web Deploy 3.6 is installed or not.
+
+#                 Added code to list whether G-Admins-Web* Groups are added to Administrarots Group.
+
+#                 Added code to list whether WDeploy* accounts exists as they supposed to be created part of MS Web Deploy 3.6 Install.
+
+#                 Commented out code for listing .NET Frame work version as it works only for v4.0
+
+#                 Added code to list which version of .NET Frame work installed
+
+#
+
+#################################################################################################################################################
+
+#################################################################################################################################################
+
+ 
+
+#Define any variables
+
+#WMI Objects
+
+$disk= get-WmiObject Win32_LogicalDisk -filter "DeviceID = 'C:' or DeviceID = 'D:' or DeviceID = 'E:'"
+
+$WIN_OS= get-WmiObject Win32_OperatingSystem
+
+$IIS= Get-Service * | where {$_.Name -eq "w3svc"}
+
+ 
+
+#Function to get registry entries
+
+function CheckRegistryFiles
+
+               {
+
+              
+
+               $RegPath = "registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\policies\system"
+
+               $EnableLUA=(get-itemproperty -Path $RegPath -Name EnableLUA).EnableLUA
+
+               $ConsentPromptBehaviorAdmin=(get-itemproperty -Path $RegPath -Name ConsentPromptBehaviorAdmin).ConsentPromptBehaviorAdmin
+
+              
+
+               }
+
+ 
+
+#Checking OS Type:
+
+write-host "Checking OS Type:" -ForegroundColor red
+
+((Get-WMIObject win32_operatingsystem).Name).ToString().Split('|')[0].Trim()
+
+(Get-WmiObject Win32_OperatingSystem).OSArchitecture
+
+#Get-WMIObject win32_operatingsystem | ft Name, OSArchitecture
+
+""
+
+ 
+
+#Checking Number of Processors:
+
+write-host "Checking CPU:" -ForegroundColor red
+
+"NumberOfProcessors = " + (Get-WmiObject Win32_ComputerSystem).NumberOfProcessors
+
+#Get-WmiObject Win32_ComputerSystem | Select NumberOfProcessors,NumberOfLogicalProcessors
+
+#Get-WmiObject –class Win32_processor | ft systemname,Name,DeviceID,NumberOfCores,NumberOfLogicalProcessors
+
+#Get-WmiObject Win32_ComputerSystem | Select NumberOfProcessors
+
+""
+
+ 
+
+#Checking Number of Cores and Number of Scokets:
+
+$processors = get-wmiobject win32_processor
+
+if (@($processors)[0].NumberOfCores)
+
+    {
+
+        $cores = @($processors).count * @($processors)[0].NumberOfCores
+
+    }
+
+    else
+
+    {
+
+        $cores = @($processors).count
+
+    }
+
+$sockets = @(@($processors) |
+
+% {$_.SocketDesignation} |
+
+select-object -unique).count;
+
+ 
+
+"Number of Sockets: $sockets";
+
+"Number of Cores: $cores";
+
+""
+
+ 
+
+#Checking Number of Cores and Number of Logical Processors:
+
+Get-WmiObject –class Win32_processor | ft Name,DeviceID,NumberOfCores,NumberOfLogicalProcessors
+
+ 
+
+#Checking RAM:
+
+write-host "Checking RAM:" -ForegroundColor red
+
+#Get-WmiObject -class "Win32_PhysicalMemoryArray"
+
+#(systeminfo | Select-String 'Total Physical Memory:').ToString().Split(':')[1].Trim()
+
+"RAM = " + [math]::round(((Get-WmiObject -Class Win32_ComputerSystem).TotalPhysicalMemory)/ 1GB, 2) + "GB"
+
+""
+
+ 
+
+#Drive configuration should be 100gb C drive and a 50gb D & E:
+
+write-host "Checking Drives:" -ForegroundColor red
+
+foreach ($Drive in $disk)
+
+               {
+
+               Switch($Drive.DeviceID)
+
+                              {                            
+
+                              C:{if ($Drive.Size -lt 106300440576)
+
+                                             {"Drive is not configured properly."}
+
+            else
+
+                                             {"Drive " + $drive.Name + " IS configured properly."};
+
+                                             "Drive = " + $drive.Name + "   Drive Size:" + "   " + [math]::round($Drive.size/1024/1024/1024, 0) + "GB"  + "  FreeSpace:  " + [math]::round($Drive.freespace/1024/1024/1024, 0) + "GB"
+
+            ""
+
+                                             }
+
+        D:{if ($Drive.Size -lt 52613349376)
+
+                                             {"Drive is not configured properly."}
+
+                                             else
+
+                                             {"Drive " + $drive.Name + " IS configured properly."};
+
+                                             "Drive = " + $drive.Name + "   Drive Size:" + "   " + [math]::round($Drive.size/1024/1024/1024, 0) + "GB"  + "  FreeSpace:  " + [math]::round($Drive.freespace/1024/1024/1024, 0) + "GB"
+
+            ""
+
+                                             }
+
+        E:{if ($Drive.Size -lt 52613349376)
+
+                                             {"Drive is not configured properly."}
+
+                                             else
+
+                                             {"Drive " + $drive.Name + " IS configured properly."};
+
+                                             "Drive = " + $drive.Name + "   Drive Size:" + "   " + [math]::round($Drive.size/1024/1024/1024, 0) + "GB"  + "  FreeSpace:  " + [math]::round($Drive.freespace/1024/1024/1024, 0) + "GB"
+
+            ""
+
+                                             }
+
+                              }             
+
+               }
+
+""
+
+ 
+
+#Check Registry settings
+
+write-host "CheckRegistryFiles:" -ForegroundColor red
+
+#LUA
+
+"Enable 'on' or 'off':"     
+
+               if ($EnableLUA = "1")
+
+                              {"Registry value = 1 Not Changed"}
+
+                              else
+
+                                             {"Registry value = 0 Already Changed"}
+
+                                            
+
+               if ($ConsentPromptBehaviorAdmin = "1")
+
+                              {"Registry value = 1 Not Changed"}
+
+                              else
+
+                                             {"Registry value = 0 Already Changed"}
+
+""
+
+#LANMAN Server
+
+write-host "Checking LANMAN Server:" -ForegroundColor red
+
+if(Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" | ?{$_.property -match "MaxMpxCt"})  
+
+                              {  
+
+                                              "MaxMpxCt Key Exists"
+
+                              }  
+
+               else 
+
+                              {  
+
+                                             "MaxMpxCt Key Does Not Exist"
+
+            #get-item -path HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters | new-Itemproperty -name MaxMpxCt -PropertyType DWORD -value 00000800
+
+                              } 
+
+if(Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" | ?{$_.property -match "MaxWorkItems"})  
+
+                              {  
+
+                                             "MaxWorkItems Key Exists"
+
+                              }  
+
+               else 
+
+                              {  
+
+            "MaxMpxCt Key Does Not Exist"
+
+                                             #get-item -path HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters | new-Itemproperty -name MaxWorkItems -PropertyType DWORD -Value 00002000 
+
+                              } 
+
+""       
+
+write-host "Checking LANMAN WorkStation:" -ForegroundColor red
+
+if(Get-Item "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" | ?{$_.property -match "MaxCmds"})  
+
+                              {  
+
+                                              "MaxCmds Key Exists"
+
+                              }  
+
+               else 
+
+                              {  
+
+                                             "MaxCmds Key Does Not Exist"
+
+            #get-item -path HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters | new-ItemProperty -Name MaxCmds -PropertyType DWORD -value 00000800
+
+                              } 
+
+""
+
+ 
+
+#Spit out all windows web server features installed:
+
+write-host "All web components installed:" -ForegroundColor red -NoNewline
+
+Import-Module servermanager
+
+Get-WindowsFeature Web*
+
+Get-WindowsFeature NET*
+
+Get-WindowsFeature Telnet*
+
+""
+
+ 
+
+#Checking to see whether G-Admins-WebEngineering, G-AdminsWebOperations and WDeployAdmin are part of Administrators Group:
+
+write-host "Checking to see whether G-Admins-WebEngineering, G-AdminsWebOperations and WDeployAdmin are part of Administrators Group:" -ForegroundColor red
+
+net localgroup Administrators
+
+#Get-LocalGroupMember -Group "Administrators" | format-table name -AutoSize
+
+ 
+
+ 
+
+#Get-LocalGroupMember -Group "Administrators" | Where-Object {$_.Name}
+
+#Start-Sleep -s 15
+
+#$groups = "G-Admins-WebEngineering","G-Admins-WebOperations","WDeployAdmin"
+
+#$group = "Administrators";
+
+#$groupObj =[ADSI]"WinNT://./$group,group"
+
+#$membersObj = @($groupObj.psbase.Invoke("Members"))
+
+ 
+
+#$members = ($membersObj | foreach {$_.GetType().InvokeMember("Name", 'GetProperty', $null, $_, $null)})
+
+ 
+
+#ForEach ($groupmember in $groups) {
+
+#If ($members -contains $groupmember) {
+
+#      Write-Host "$groupmember exists in the group $group"
+
+# } Else {
+
+#        Write-Host "$groupmember not exists in the group $group"
+
+#}}
+
+""
+
+ 
+
+#Checking to see whether WDeployAdmin and WDeployConfigWriter users existin in Local users list:
+
+write-host "Checking to see whether WDeployAdmin and WDeployConfigWriter users existin in Local users list:" -ForegroundColor red -NoNewline
+
+net users
+
+#Get-LocalUser | format-table name -AutoSize
+
+ 
+
+ 
+
+#Start-Sleep -s 15
+
+#$op = Get-LocalUser | Where-Object {$_.Name -eq "WDeployAdmin"}
+
+#Write-Host $op
+
+#Get-LocalUser | Where-Object {$_.Name -eq "WDeployConfigWriter"}
+
+""
+
+ 
+
+ 
+
+#Show List of what should be installed via standard build for comparison
+
+#""
+
+#"Scripted install should only have these components, compare to full list to  make sure!!:"
+
+#""
+
+#Get-WindowsFeature Web-Static-Content, Web-Default-Doc, Web-Http-Errors, Web-Http-Redirect, Web-Asp-Net, Web-Net-Ext, Web-ISAPI-Ext, Web-ISAPI-Filter,
+
+#             Web-Http-Logging, Web-Log-Libraries, Web-Request-Monitor, Web-Http-Tracing, Web-Custom-Logging, Web-ODBC-Logging, Web-Basic-Auth, Web-Windows-Auth,
+
+#             Web-Cert-Auth, Web-Url-Auth, Web-Filtering, Web-Mgmt-Console, Web-Scripting-Tools, Web-Mgmt-Service, telnet-client
+
+#""
+
+ 
+
+ 
+
+#Check to make sure inetpub directory has been moved to the D:
+
+""
+
+write-host "Checking Location of inetpub/wwwroot directory to see whether it is D:\Inetpub\wwwroot" -ForegroundColor red
+
+$WWWPath = Test-Path D:\Inetpub\wwwroot
+
+$WWWPath
+
+""
+
+ 
+
+#Check to see if MSDeploy is installed
+
+write-host "Fetching MSDeploy Install info:" -ForegroundColor red
+
+#$MSDeploy = get-wmiobject -query "select * from win32_product where caption ='Web Deployment Tool'"
+
+$MSDeploy = get-wmiobject -query "select * from win32_product where caption ='Microsoft Web Deploy 3.6'"
+
+if (!$MSDeploy) { write-host "MS Web Deploy 3.6 Not Installed" }
+
+else {
+
+write-host $MSDeploy.caption
+
+write-host $MSDeploy.version }
+
+""
+
+ 
+
+write-host "Note: If WDeployAdmin user does not exists in Administrators group and WDeployAdmin & WDeployConfigWriter users does not exists in Local Users list but MS Web Deploy 3.6 shows as installed, then its only partially installed. Uninstall and re-install MS Web Deploy 3.6" -ForegroundColor yellow
+
+""
+
+ 
+
+#Check to see if .NET 4.0 or above is installed:
+
+write-host "Fetching .NET 4.0 or above Framework info:" -ForegroundColor red
+
+#$DOTNET = get-wmiobject -query "select * from win32_product where caption ='Microsoft .NET Framework 4 Extended'"
+
+#write-host $DOTNET.caption
+
+#write-host $DOTNET.version
+
+$NetRegKey = Get-Childitem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full'
+
+$Release = $NetRegKey.GetValue("Release")
+
+Switch ($Release) {
+
+   378389 {$NetFrameworkVersion = "4.5"}
+
+   378675 {$NetFrameworkVersion = "4.5.1"}
+
+   378758 {$NetFrameworkVersion = "4.5.1"}
+
+   379893 {$NetFrameworkVersion = "4.5.2"}
+
+   393295 {$NetFrameworkVersion = "4.6"}
+
+   393297 {$NetFrameworkVersion = "4.6"}
+
+   394254 {$NetFrameworkVersion = "4.6.1"}
+
+   394271 {$NetFrameworkVersion = "4.6.1"}
+
+   394802 {$NetFrameworkVersion = "4.6.2"}
+
+   394806 {$NetFrameworkVersion = "4.6.2"}
+
+   460798 {$NetFrameworkVersion = "4.7"}
+
+   460805 {$NetFrameworkVersion = "4.7"}
+
+   461308 {$NetFrameworkVersion = "4.7.1"}
+
+   461310 {$NetFrameworkVersion = "4.7.1"}
+
+   461814 {$NetFrameworkVersion = "4.7.2"}
+
+   461808 {$NetFrameworkVersion = "4.7.2"}
+
+   528040 {$NetFrameworkVersion = "4.8"}
+
+   528049 {$NetFrameworkVersion = "4.8"}
+
+   Default {$NetFrameworkVersion = "Net Framework 4.5 or later is not installed."}
+
+}
+
+$NetFrameworkVersion
+
+""
